@@ -8,7 +8,7 @@ from typing import Any
 import ayla_iot_unofficial
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import (
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
@@ -56,51 +56,11 @@ class NomaIQConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
     MINOR_VERSION = 1
 
-    def __init__(self) -> None:
-        """Initialize the config flow."""
-        super().__init__()
-        self._reauth_entry: ConfigEntry | None = None
-
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the initial step."""
         errors: dict[str, str] = {}
-
-        # If this is a reauth flow, get the existing entry
-        if self._reauth_entry:
-            if user_input is not None:
-                # Update the existing entry
-                try:
-                    await validate_input(self.hass, user_input)
-                except ayla_iot_unofficial.AylaApiError:
-                    errors["base"] = "cannot_connect"
-                except ayla_iot_unofficial.AylaAuthError:
-                    errors["base"] = "invalid_auth"
-                except Exception:
-                    _LOGGER.exception("Unexpected exception")
-                    errors["base"] = "unknown"
-                else:
-                    # Update the existing entry with new data
-                    self.hass.config_entries.async_update_entry(
-                        self._reauth_entry, data=user_input
-                    )
-                    await self.hass.config_entries.async_reload(
-                        self._reauth_entry.entry_id
-                    )
-                    return self.async_abort(reason="reauth_successful")
-
-            # Show form with current values for reauth
-            return self.async_show_form(
-                step_id="user",
-                data_schema=self.add_suggested_values_to_schema(
-                    CONFIG_SCHEMA, self._reauth_entry.data
-                ),
-                errors=errors,
-                description_placeholders={
-                    "username": self._reauth_entry.data[CONF_USERNAME]
-                },
-            )
 
         # Handle new configuration
         if user_input is not None:
@@ -125,7 +85,32 @@ class NomaIQConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle reauth flow."""
-        self._reauth_entry = self.hass.config_entries.async_get_entry(
-            self.context["entry_id"]
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                await validate_input(self.hass, user_input)
+            except ayla_iot_unofficial.AylaApiError:
+                errors["base"] = "cannot_connect"
+            except ayla_iot_unofficial.AylaAuthError:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected exception")
+                errors["base"] = "unknown"
+            else:
+                # Update the existing entry with new data
+                entry = self.hass.config_entries.async_get_entry(
+                    self.context["entry_id"]
+                )
+                self.hass.config_entries.async_update_entry(entry, data=user_input)
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reauth_successful")
+
+        # Show form with current values for reauth
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        return self.async_show_form(
+            step_id="reauth",
+            data_schema=self.add_suggested_values_to_schema(CONFIG_SCHEMA, entry.data),
+            errors=errors,
+            description_placeholders={"username": entry.data[CONF_USERNAME]},
         )
-        return await self.async_step_user(user_input)

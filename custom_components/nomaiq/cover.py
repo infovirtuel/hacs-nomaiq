@@ -1,4 +1,4 @@
-"""Platform for light integration."""
+"""Platform for cover integration."""
 
 from __future__ import annotations
 
@@ -50,8 +50,8 @@ class NomaIQGarageDoorOpenerEntity(CoverEntity):
         """Initialize a NomaIQ Garage Door Opener."""
         self.coordinator = coordinator
         self._device = device
-        self.device_class = CoverDeviceClass.GARAGE
-        self.supported_features = (
+        self._attr_device_class = CoverDeviceClass.GARAGE
+        self._attr_supported_features = (
             CoverEntityFeature.OPEN | CoverEntityFeature.CLOSE | CoverEntityFeature.STOP
         )
         self._attr_name = device.name
