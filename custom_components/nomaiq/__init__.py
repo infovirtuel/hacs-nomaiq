@@ -19,9 +19,10 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .const import NORMAL_UPDATE_INTERVAL
 from .coordinator import NomaIQDataUpdateCoordinator
 
-_PLATFORMS: list[Platform] = [Platform.LIGHT]
+_PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.COVER]
 _LOGGER = logging.getLogger(__name__)
 
 type NomaIQConfigEntry = ConfigEntry[NomaIQDataUpdateCoordinator]
@@ -56,7 +57,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: NomaIQConfigEntry) -> bo
     coordinator = NomaIQDataUpdateCoordinator(
         hass=hass,
         logger=_LOGGER,
-        update_interval=timedelta(seconds=30),
+        update_interval=timedelta(seconds=NORMAL_UPDATE_INTERVAL),
         api=api,
     )
     await coordinator.async_config_entry_first_refresh()

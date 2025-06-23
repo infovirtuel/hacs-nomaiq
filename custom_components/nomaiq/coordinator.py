@@ -1,13 +1,14 @@
 """Coordinator for nomaiq."""
 
 from datetime import timedelta
+from typing import Set
 
 import ayla_iot_unofficial
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN
+from .const import DOMAIN, NORMAL_UPDATE_INTERVAL, TRANSITION_UPDATE_INTERVAL
 
 
 class NomaIQDataUpdateCoordinator(
@@ -24,6 +25,8 @@ class NomaIQDataUpdateCoordinator(
     ) -> None:
         """Initialize global data updater."""
         self._api = api
+        self._devices_in_transition: Set[str] = set()  # Track devices opening/closing
+        self._last_full_update = 0  # Track when we last did a full update
 
         super().__init__(
             hass,
@@ -38,6 +41,32 @@ class NomaIQDataUpdateCoordinator(
         """Return the API instance."""
         return self._api
 
+    def set_device_transition_state(
+        self, device_serial: str, in_transition: bool
+    ) -> None:
+        """Set whether a device is in transition state (opening/closing)."""
+        if in_transition:
+            self._devices_in_transition.add(device_serial)
+            # Switch to faster update interval if not already set
+            if self.update_interval.total_seconds() != TRANSITION_UPDATE_INTERVAL:
+                self.update_interval = timedelta(seconds=TRANSITION_UPDATE_INTERVAL)
+                self.logger.debug(
+                    "Switched to fast update interval for device %s", device_serial
+                )
+        else:
+            self._devices_in_transition.discard(device_serial)
+            # Switch back to normal interval if no devices are in transition
+            if (
+                not self._devices_in_transition
+                and self.update_interval.total_seconds() != NORMAL_UPDATE_INTERVAL
+            ):
+                self.update_interval = timedelta(seconds=NORMAL_UPDATE_INTERVAL)
+                self.logger.debug("Switched back to normal update interval")
+
+    def is_device_in_transition(self, device_serial: str) -> bool:
+        """Check if a device is currently in transition state."""
+        return device_serial in self._devices_in_transition
+
     async def _async_update_data(self) -> list[ayla_iot_unofficial.device.Device]:
         """Fetch data."""
         try:
@@ -50,8 +79,41 @@ class NomaIQDataUpdateCoordinator(
                 raise UpdateFailed("Failed to refresh auth") from ex
 
             devices = await self._api.async_get_devices()
-            for device in devices:
-                await device.async_update()
+            current_time = self.hass.loop.time()
+
+            # Determine if this should be a full update or transition-only update
+            is_full_update = (
+                self.update_interval.total_seconds() == NORMAL_UPDATE_INTERVAL
+                or current_time - self._last_full_update >= NORMAL_UPDATE_INTERVAL
+            )
+
+            if is_full_update:
+                # Full update: update all devices
+                self.logger.debug("Performing full update of all devices")
+                for device in devices:
+                    await device.async_update()
+                self._last_full_update = current_time
+            else:
+                # Transition update: only update devices in transition
+                self.logger.debug(
+                    "Performing transition update for %d devices",
+                    len(self._devices_in_transition),
+                )
+                for device in devices:
+                    if device.serial_number in self._devices_in_transition:
+                        await device.async_update()
+                        # Check if device status has changed from transition to stable
+                        door_status = device.get_property_value("door_status")
+                        if door_status in ["opened", "closed"]:
+                            self.set_device_transition_state(
+                                device.serial_number, False
+                            )
+                            self.logger.debug(
+                                "Device %s transition completed, status: %s",
+                                device.serial_number,
+                                door_status,
+                            )
+
         except Exception as ex:
             raise UpdateFailed(f"Exception on getting states: {ex}") from ex
         else:
