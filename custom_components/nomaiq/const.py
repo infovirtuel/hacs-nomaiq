@@ -1,6 +1,8 @@
 """Constants for the nomaiq integration."""
 
 DOMAIN = "nomaiq"
+CLIENT_ID = "ctc-noma-Bg-id"
+CLIENT_SECRET = "ctc-noma-WNHWBmAGLoaMl8xq8lx9XxGmiTQ"
 
 # Update intervals
 NORMAL_UPDATE_INTERVAL = 30  # seconds

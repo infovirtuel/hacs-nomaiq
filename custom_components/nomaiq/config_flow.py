@@ -10,22 +10,18 @@ import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import (
-    CONF_CLIENT_ID,
-    CONF_CLIENT_SECRET,
     CONF_PASSWORD,
     CONF_USERNAME,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN
+from .const import CLIENT_ID, CLIENT_SECRET, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_CLIENT_ID): str,
-        vol.Required(CONF_CLIENT_SECRET): str,
         vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
     }
@@ -37,14 +33,12 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 
     Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
     """
-    client_id = data[CONF_CLIENT_ID]
-    client_secret = data[CONF_CLIENT_SECRET]
     username = data[CONF_USERNAME]
     password = data[CONF_PASSWORD]
 
     session = async_get_clientsession(hass)
     hub = ayla_iot_unofficial.new_ayla_api(
-        username, password, client_id, client_secret, session
+        username, password, CLIENT_ID, CLIENT_SECRET, session
     )
     await hub.async_sign_in()
     return data

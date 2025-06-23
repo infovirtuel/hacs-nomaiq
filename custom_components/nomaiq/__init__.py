@@ -9,8 +9,6 @@ import ayla_iot_unofficial
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
-    CONF_CLIENT_ID,
-    CONF_CLIENT_SECRET,
     CONF_PASSWORD,
     CONF_USERNAME,
     Platform,
@@ -19,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import NORMAL_UPDATE_INTERVAL
+from .const import CLIENT_ID, CLIENT_SECRET, NORMAL_UPDATE_INTERVAL
 from .coordinator import NomaIQDataUpdateCoordinator
 
 _PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.COVER]
@@ -34,14 +32,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: NomaIQConfigEntry) -> bo
     config = entry.data
     options = entry.options
 
-    client_id = options.get(CONF_CLIENT_ID, config.get(CONF_CLIENT_ID, ""))
-    client_secret = options.get(CONF_CLIENT_SECRET, config.get(CONF_CLIENT_SECRET, ""))
     username = options.get(CONF_USERNAME, config.get(CONF_USERNAME, ""))
     password = options.get(CONF_PASSWORD, config.get(CONF_PASSWORD, ""))
 
     session = async_get_clientsession(hass)
     api = ayla_iot_unofficial.new_ayla_api(
-        username, password, client_id, client_secret, session
+        username, password, CLIENT_ID, CLIENT_SECRET, session
     )
 
     try:
