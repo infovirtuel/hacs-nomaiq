@@ -1,12 +1,10 @@
-"""Platform for light integration with color, brightness, and temperature support."""
+"""Platform for NomaIQ light integration with full color, brightness, and temperature support."""
 
 from __future__ import annotations
-
 from typing import Any
 import logging
 import colorsys
 
-import ayla_iot_unofficial
 import ayla_iot_unofficial.device
 
 from homeassistant.components.light import ColorMode, LightEntity
@@ -47,6 +45,7 @@ class NomaIQLightEntity(LightEntity):
         """Initialize a NomaIQ light."""
         self.coordinator = coordinator
         self._device = device
+
         self._attr_supported_color_modes = {
             ColorMode.ONOFF, ColorMode.BRIGHTNESS, ColorMode.COLOR_TEMP, ColorMode.HS
         }
@@ -59,24 +58,22 @@ class NomaIQLightEntity(LightEntity):
             name=device.name,
         )
 
-    @property
-    def is_on(self) -> bool | None:
-        """Return true if light is on."""
-        device = next(
+    def _get_device(self) -> ayla_iot_unofficial.device.Device | None:
+        return next(
             (d for d in self.coordinator.data if d.serial_number == self._device.serial_number),
             None,
         )
+
+    @property
+    def is_on(self) -> bool | None:
+        device = self._get_device()
         state = device and device.get_property_value("power")
         _LOGGER.debug("Light %s is_on read as: %s", self._device.serial_number, state)
         return state
 
     @property
     def brightness(self) -> int | None:
-        """Return brightness (0-255)."""
-        device = next(
-            (d for d in self.coordinator.data if d.serial_number == self._device.serial_number),
-            None,
-        )
+        device = self._get_device()
         brightness = None
         if device:
             val = device.get_property_value("brightness")
@@ -87,13 +84,9 @@ class NomaIQLightEntity(LightEntity):
 
     @property
     def color_temp(self) -> int | None:
-        """Return color temperature in mireds."""
-        device = next(
-            (d for d in self.coordinator.data if d.serial_number == self._device.serial_number),
-            None,
-        )
+        device = self._get_device()
         ct = None
-        if device:
+        if device and device.get_property_value("mode") == "white":
             val = device.get_property_value("color_temp")
             if val is not None:
                 ct = int(153 + (100 - val) * (500 - 153) / 100)
@@ -102,43 +95,47 @@ class NomaIQLightEntity(LightEntity):
 
     @property
     def hs_color(self) -> tuple[float, float] | None:
-        """Return HS color."""
-        device = next(
-            (d for d in self.coordinator.data if d.serial_number == self._device.serial_number),
-            None,
-        )
+        device = self._get_device()
         hs = None
-        if device:
+        if device and device.get_property_value("mode") == "colour":
             hue = device.get_property_value("color_select")
             sat = device.get_property_value("color_saturation")
             if hue is not None and sat is not None:
-                # Convert from device integer to 0-360, 0-100
                 hs = (hue % 360, sat)
         _LOGGER.debug("Light %s HS color read as: %s", self._device.serial_number, hs)
         return hs
+
+    @property
+    def color_mode(self) -> ColorMode:
+        """Return the active color mode based on device mode."""
+        device = self._get_device()
+        if not device or not device.get_property_value("power"):
+            return ColorMode.ONOFF
+        mode = device.get_property_value("mode")
+        if mode == "white":
+            return ColorMode.COLOR_TEMP
+        elif mode == "colour":
+            return ColorMode.HS
+        return ColorMode.ONOFF
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn device on with optional color/brightness/temperature."""
         _LOGGER.debug("Turning ON light %s with kwargs: %s", self._device.serial_number, kwargs)
         try:
-            # Power on
             await self._device.async_set_property_value("power", 1)
             _LOGGER.debug("Set power=1")
 
-            # Brightness
             if brightness := kwargs.get("brightness"):
                 val = int(brightness * 100 / 255)
                 await self._device.async_set_property_value("brightness", val)
                 _LOGGER.debug("Set brightness=%s", val)
 
-            # Color temperature (white mode)
             if color_temp := kwargs.get("color_temp"):
                 val = int(100 - (color_temp - 153) * 100 / (500 - 153))
-                await self._device.async_set_property_value("color_temp", val)
                 await self._device.async_set_property_value("mode", "white")
+                await self._device.async_set_property_value("color_temp", val)
                 _LOGGER.debug("Set color_temp=%s and mode=white", val)
 
-            # HS color (color mode)
             if hs_color := kwargs.get("hs_color"):
                 hue, sat = hs_color
                 r, g, b = colorsys.hsv_to_rgb(hue / 360, sat / 100, 1)
@@ -147,8 +144,6 @@ class NomaIQLightEntity(LightEntity):
                 await self._device.async_set_property_value("color_select", rgb_int)
                 await self._device.async_set_property_value("color_saturation", int(sat))
                 _LOGGER.debug("Set color RGB int=%s from HS=%s", rgb_int, hs_color)
-
-            _LOGGER.debug("Write commands sent to %s", self._device.serial_number)
 
         except Exception as e:
             _LOGGER.error("Failed to turn on light %s: %s", self._device.serial_number, e)
