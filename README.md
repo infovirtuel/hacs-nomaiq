@@ -4,8 +4,7 @@
 
 This integration exposes devices from the Noma IQ app. For now, only the current devices have been tested:
 
-- Garage Door Opener
-- Garage Door Opener's Light
+- Light Bulbs
 
 ## Installation
 
