@@ -70,6 +70,7 @@ class NomaIQDataUpdateCoordinator(
     async def _async_update_data(self) -> list[ayla_iot_unofficial.device.Device]:
         """Fetch data."""
         try:
+            # Refresh authentication if needed
             try:
                 self._api.check_auth()
             except ayla_iot_unofficial.AylaAuthExpiringError:
@@ -79,6 +80,16 @@ class NomaIQDataUpdateCoordinator(
                 raise UpdateFailed("Failed to refresh auth") from ex
 
             devices = await self._api.async_get_devices()
+
+            # Fetch full properties for each device and log them
+            for device in devices:
+                await device.async_update()
+                self.logger.debug(
+                    "Device %s full properties after update: %s",
+                    device.serial_number,
+                    {k: device.get_property_value(k) for k in device.properties_full},
+                )
+
             current_time = self.hass.loop.time()
 
             # Determine if this should be a full update or transition-only update
