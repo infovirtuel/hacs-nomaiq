@@ -26,10 +26,8 @@ async def async_setup_entry(
     coordinator: NomaIQDataUpdateCoordinator = entry.runtime_data
 
     for device in coordinator.data:
-        if (
-            "light_control" in device.properties_full
-            and "light_name" in device.properties_full
-        ):
+        # Use the actual properties from your debug logs
+        if "power" in device.properties_full and "voice_data" in device.properties_full:
             async_add_entities(
                 [NomaIQLightEntity(coordinator, device)], update_before_add=False
             )
@@ -48,9 +46,9 @@ class NomaIQLightEntity(LightEntity):
         self._device = device
         self._attr_supported_color_modes = {ColorMode.ONOFF}
         self._attr_color_mode = ColorMode.ONOFF
-        self._attr_name = device.get_property_value("light_name") or device.name
+        self._attr_name = device.get_property_value("voice_data") or device.name
         self._attr_unique_id = f"nomaiq_light_{device.serial_number}"
-        self._attr_has_entity_name = device.get_property_value("light_name")
+        self._attr_has_entity_name = True
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device.serial_number)},
             name=device.name,
@@ -64,15 +62,15 @@ class NomaIQLightEntity(LightEntity):
             (d for d in data if d.serial_number == self._device.serial_number),
             None,
         )
-        return device and device.get_property_value("light_control")
+        return device and device.get_property_value("power")
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn device on."""
-        await self._device.async_set_property_value("light_control", 1)
+        await self._device.async_set_property_value("power", True)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn device off."""
-        await self._device.async_set_property_value("light_control", 0)
+        await self._device.async_set_property_value("power", False)
 
     async def async_update(self) -> None:
         """Update the light state."""
