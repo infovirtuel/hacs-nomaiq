@@ -1,8 +1,9 @@
-"""Platform for light integration."""
+"""Platform for light integration with debug logging."""
 
 from __future__ import annotations
 
 from typing import Any
+import logging
 
 import ayla_iot_unofficial
 import ayla_iot_unofficial.device
@@ -16,6 +17,7 @@ from . import NomaIQConfigEntry
 from .const import DOMAIN
 from .coordinator import NomaIQDataUpdateCoordinator
 
+_LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -62,16 +64,33 @@ class NomaIQLightEntity(LightEntity):
             (d for d in data if d.serial_number == self._device.serial_number),
             None,
         )
-        return device and device.get_property_value("power")
+        state = device and device.get_property_value("power")
+        _LOGGER.debug("Light %s is_on read as: %s", self._device.serial_number, state)
+        return state
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn device on."""
-        await self._device.async_set_property_value("power", True)
+        _LOGGER.debug("Turning ON light %s", self._device.serial_number)
+        try:
+            await self._device.async_set_property_value("power", 1)
+            _LOGGER.debug("Write command sent: power=1")
+        except Exception as e:
+            _LOGGER.error("Failed to send power=1 to %s: %s", self._device.serial_number, e)
+        await self.coordinator.async_request_refresh()
+        _LOGGER.debug("Requested coordinator refresh after turning ON")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn device off."""
-        await self._device.async_set_property_value("power", False)
+        _LOGGER.debug("Turning OFF light %s", self._device.serial_number)
+        try:
+            await self._device.async_set_property_value("power", 0)
+            _LOGGER.debug("Write command sent: power=0")
+        except Exception as e:
+            _LOGGER.error("Failed to send power=0 to %s: %s", self._device.serial_number, e)
+        await self.coordinator.async_request_refresh()
+        _LOGGER.debug("Requested coordinator refresh after turning OFF")
 
     async def async_update(self) -> None:
         """Update the light state."""
+        _LOGGER.debug("Requesting coordinator refresh for light %s", self._device.serial_number)
         await self.coordinator.async_request_refresh()
